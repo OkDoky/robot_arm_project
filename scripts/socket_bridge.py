@@ -1,7 +1,6 @@
 import time
 import socket
 import traceback
-import signal
 from threading import Thread, Event
 from collections import deque
 
@@ -19,6 +18,8 @@ class SocketClientHandler():
 
 
     def request_connection(self):
+        ## 소켓 서버에 연결 요청, 연결시까지 지속적으로 1초마다 연결시도를 하게되며, 
+        ## 연결되면 recv thread를 열어 서버로부터 데이터를 받을 수 있도록 준비한다.
         while not self.shutdown_event.is_set():
             try:
                 self.current_client.connect((self.host, self.port))
@@ -33,26 +34,27 @@ class SocketClientHandler():
         return True
 
     def __del__(self):
-        self.request_shutdown_thread()
+        self._request_shutdown_thread()
         self.current_client.close()
         self.is_connected = False
         print("[SocketClientHandler] successfully delete client instance")
 
-    def request_shutdown_thread(self):
-        try:
-            self.shutdown_event.set()
-        except Exception:
-            print("[SocketClientHandler] failed to shutdown thread")
+    def _request_shutdown_thread(self):
+        # thread event를 활성화하는 함수
+        self.shutdown_event.set()
     
     def send_msg(self, data):
+        # 데이터 포멧 변경 및 전송
         data += "|"
-        print("send : %s"%data)
+        # print("send : %s"%data)
         self.current_client.send(data.encode('utf-8'))
 
     def get_msg(self):
+        # 외부에서 호출하게 되며, 받은 데이터가 있을 경우 데이터를 반환, 
+        # 없을 경우 None 반환
         if not len(self.recv_queue) == 0:
             data = self.recv_queue.pop()
-            print("get : %s"%data)
+            # print("get : %s"%data)
             return data
         return None
 
@@ -82,9 +84,9 @@ if __name__ == "__main__":
     conn = _cls.request_connection()
     while True:
         time.sleep(1)
-        _cls.send_msg("B: 90")
+        _cls.send_msg('{"B": 90, "S": 90, "E": 90, "G": 0}')
         time.sleep(1)
-        _cls.send_msg("B: 120")
+        _cls.send_msg('{"B": 120, "S": 90, "E": 90, "G": 0}')
         if not _cls.is_connected:
             break
 

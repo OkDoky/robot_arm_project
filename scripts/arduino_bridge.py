@@ -19,51 +19,47 @@ class ArduinoBridge:
             self.connection()
 
     def connection(self):
+        ## 아두이노와 연결 시도, 최대 5회의 시도 후 연결 실패시 재시도 중지
         count = 1
         while True:
             try:
                 self.conn = serial.Serial(self.port, self.buadrate, timeout=1)
                 self.read_thread.start()
-                break
+                return True
             except Exception:
                 print("[ArduinoBridge] fail to get serial connection, %s"%traceback.format_exc())
             if count >= 5:
-                print("[ArduinoBridge] fail to connection, check port or buadrate or cable..")
-                break
+                return False
             count += 1
             time.sleep(1)
-        return self.conn.is_open
     
     def disconnect(self):
         self.thread_event.set()
         self.conn.close()
 
     def get_msg(self):
-        try:
+        if not len(self.status) == 0:
             status = self.status.pop()
             return status
-        except Exception:
+        else:
             return None
     
     def send_msg(self, msg):
         try:
+            print("[ArduinoBridge] control msg : %s"%msg)
             self.conn.write(msg.encode())
         except Exception:
             print("[ArduinoBridge] failed to send message.. %s"%traceback.format_exc())
 
     def _status_thread(self):
         while not self.thread_event.is_set():
-            try:
-                if self.conn.in_waiting:
-                    line = self.conn.readline().decode('utf-8').rstrip()
-                    status = []
-                    angles = line.split(", ")
-                    status = [angles[i].split(':')[1] for i in range(len(angles))]
-                    self.status.append(status)
-            except Exception:
-                print("ArduinoBridge] fail to read data from arduino.., %s"%traceback.format_exc())
-            finally:
-                time.sleep(0.005)
+            if self.conn.in_waiting:
+                line = self.conn.readline().decode('utf-8').rstrip()
+                status = []
+                angles = line.split(", ")
+                status = [angles[i].split(':')[1] for i in range(len(angles))]
+                self.status.append(status)
+            time.sleep(0.005)
 
 def test_thread(bridge, thread_event):
     while not thread_event.is_set():
@@ -74,28 +70,31 @@ def test_thread(bridge, thread_event):
 
 if __name__ == "__main__":
     ## 아두이노 연결 class 초기화
-    bridge = ArduinoBridge(PORT="/dev/cu.usbserial-1130", BUADRATE=9600)
+    bridge = ArduinoBridge(PORT="/dev/cu.usbserial-130", BUADRATE=9600)
     
     ## 아두이노와 연결 시도 및 연결상태 확인
     is_conn = bridge.connection()
+    if is_conn:
+        ## 0.01초마다 가장 아래 모터를 90도에서 140도 까지 2.5초간 움직이고, 
+        # 다시 반대로 움직이며 현재 각도를 읽어오도록 하는 루틴
+        angle = 90
+        dt = 0.05
+        thread_event = Event()
+        read_thread = Thread(target=test_thread, args=(bridge,thread_event))
+        read_thread.daemon = True
+        read_thread.start()
+        for _ in range(50):
+            angle += 1
+            bridge.send_msg("B: %s"%int(angle))
+            time.sleep(dt)
+        for _ in range(50):
+            angle -= 1
+            bridge.send_msg("B: %s"%int(angle))
+            time.sleep(dt)
+        thread_event.set()
+        bridge.disconnect()
+        print("done")
+    else:
+        print("[ArduinoBridge] fail to connection, check port or buadrate or cable..")
 
-    ## 0.1초마다 가장 아래 모터를 90도에서 140도 까지 5초간 움직이고, 
-    # 다시 반대로 움직이며 현재 각도를 읽어오도록 하는 루틴
-    angle = 90
-    dt = 0.1
-    thread_event = Event()
-    read_thread = Thread(target=test_thread, args=(bridge,thread_event))
-    read_thread.daemon = True
-    read_thread.start()
-    for _ in range(50):
-        angle += 1
-        bridge.send_msg("B: %s"%int(angle))
-        time.sleep(dt)
-    for _ in range(50):
-        angle -= 1
-        bridge.send_msg("B: %s"%int(angle))
-        time.sleep(dt)
-    thread_event.set()
-    bridge.disconnect()
-    print("done")
     

@@ -1,9 +1,8 @@
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QGridLayout, QStyleFactory, QLabel
 from PyQt5.QtGui import QPainter
-from PyQt5.QtCore import QRectF, QPointF, QLineF, Qt, pyqtSignal, QTimer
+from PyQt5.QtCore import QRectF, QPointF, QLineF, Qt, pyqtSignal
 
 import sys
-import time
 from enum import Enum
 
 
@@ -15,7 +14,9 @@ class Direction(Enum):
 
 class Joystick(QWidget):
     angleChange = pyqtSignal(str, float)
-    def __init__(self, DEFAULT_VERTICAL=0, DEFAULT_HORIZON=0, MAX_VERTICAL = 10, MAX_HORIZON=10, MIN_VERTICAL = -10, MIN_HORIZON = -10, parent=None):
+    def __init__(self, DEFAULT_VERTICAL=0, DEFAULT_HORIZON=0, 
+                 MAX_VERTICAL = 10, MAX_HORIZON=10, 
+                 MIN_VERTICAL = -10, MIN_HORIZON = -10, parent=None):
         super(Joystick, self).__init__(parent)
         self.vertical = DEFAULT_VERTICAL
         self.horizon = DEFAULT_HORIZON
@@ -42,7 +43,8 @@ class Joystick(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         # 조이스틱의 경계를 그리는 코드
-        bounds = QRectF(-self.__maxDistance, -self.__maxDistance, self.__maxDistance * 2, self.__maxDistance * 2).translated(self._center())
+        bounds = QRectF(-self.__maxDistance, -self.__maxDistance, 
+                        self.__maxDistance * 2, self.__maxDistance * 2).translated(self._center())
         painter.drawEllipse(bounds)
         painter.setBrush(Qt.black)
         # 조이스틱의 중심을 그리는 코드
@@ -78,7 +80,7 @@ class Joystick(QWidget):
         if distance < 0.3:
             return (False, 0,0)
         
-        # 각 파트를 움직여 
+        # 각 파트를 움직여 실시간 변수 조정
         if 45 <= angle < 135: # up
             self.vertical += distance
             self.vertical = min(self.max_vertical, self.vertical)
@@ -109,26 +111,55 @@ class Joystick(QWidget):
 
     def mouseMoveEvent(self, event):
         # 마우스가 움직일 때 이벤트 처리
-        if self.grabCenter:
-            self.movingOffset = self._boundJoystick(event.pos())
-            self.update()
+        if self.grabCenter: # 조이스틱이 잡힌경우
+            self.movingOffset = self._boundJoystick(event.pos()) # 조이스틱 위치 업데이트
+            self.update()  # Gui 화면 업데이트
             success, direction, distance = self.joystickDirection()
             if success:
-                self.angleChange.emit(direction.name, distance)
+                self.angleChange.emit(direction.name, distance) # signal 신호 업데이트
+
+def update_label(direction, value):
+    global V_value_label, H_value_label
+    if direction in ["Up" ,"Down"]:
+        V_value_label.setText(str(value))
+    if direction in ["Left", "Right"]:
+        H_value_label.setText(str(value))
 
 if __name__ == "__main__":
     # UI 활성화
-    app = QApplication([])
-    app.setStyle(QStyleFactory.create("Cleanlooks"))
-    mw = QMainWindow()
-    mw.setWindowTitle('Joystick example')
+    app = QApplication([])  ## PyQt5 인스턴스 생성
+    app.setStyle(QStyleFactory.create("Cleanlooks"))  ## 애플리케이션의 스타일 설정, cleanlook 스타일 생성
+    mw = QMainWindow()  ## 메뉴바, 상태바 등을 생성
+    mw.setWindowTitle('Joystick example')  ## 메인 윈도우의 제목을 설정
 
-    cw = QWidget()
-    ml = QGridLayout()
-    cw.setLayout(ml)
-    mw.setCentralWidget(cw)
+    cw = QWidget()  ## 다른 위젯을 포함가능한 컨테이너 역할
+    ml = QGridLayout()  ## 그리드 레이아웃 설정, 위젯을 격자 형태로 정렬하는데 사용
+    cw.setLayout(ml)  ## cw 위젯에 ml 그리드 레이아웃을 설정, cw안에 추가된 위젯들은 ml 그리아 형식에 따라 배치
+    mw.setCentralWidget(cw)  ## mw 메인 윈도우의 중앙 위젯을 cw로 설정
 
-    joy = Joystick()
+    ## joy stick 인스턴스 생성
+    joy = Joystick(
+        MAX_VERTICAL = 100, MAX_HORIZON=100, 
+        MIN_VERTICAL = -100, MIN_HORIZON = -100)
+    
+    ## 생성된 조이스틱을 위젯에 추가
     ml.addWidget(joy, 0, 0)
+
+    # 각도를 표시할 레이블 생성 및 추가
+    global V_value, H_value
+    V_label = QLabel("Vertical")
+    ml.addWidget(V_label, 1, 0)
+    V_value_label = QLabel(str(joy.vertical))
+    ml.addWidget(V_value_label, 2, 0)
+
+    H_label = QLabel("Horizon")
+    ml.addWidget(H_label, 1, 1)
+    H_value_label = QLabel(str(joy.horizon))
+    ml.addWidget(H_value_label, 2, 1)
+
+    ## Joystic의 angleChange 신호가 발생할때마다 
+    ## update_label 함수가 호출되어 레이블 업데이트
+    joy.angleChange.connect(update_label)
+
     mw.show()
     sys.exit(app.exec_())
