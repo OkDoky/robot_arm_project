@@ -12,18 +12,21 @@ class ArduinoBridge:
 
         self.status = deque(maxlen=10)
 
-        self.read_thread = Thread(target=self._status_thread)
-        self.read_thread.daemon = True
         self.thread_event = Event()
         if AUTOSTART:
             self.connection()
 
     def connection(self):
         ## 아두이노와 연결 시도, 최대 5회의 시도 후 연결 실패시 재시도 중지
+        if not self.conn == None:
+            self.disconnect()
+        self.thread_event.clear()
         count = 1
         while True:
             try:
                 self.conn = serial.Serial(self.port, self.buadrate, timeout=1)
+                self.read_thread = Thread(target=self._status_thread)
+                self.read_thread.daemon = True
                 self.read_thread.start()
                 return True
             except Exception:
@@ -36,6 +39,7 @@ class ArduinoBridge:
     def disconnect(self):
         self.thread_event.set()
         self.conn.close()
+        self.conn = None
 
     def get_msg(self):
         if not len(self.status) == 0:
@@ -52,6 +56,7 @@ class ArduinoBridge:
             print("[ArduinoBridge] failed to send message.. %s"%traceback.format_exc())
 
     def _status_thread(self):
+        print("[ArduinoBridge] start status thread")
         while not self.thread_event.is_set():
             if self.conn.in_waiting:
                 line = self.conn.readline().decode('utf-8').rstrip()
@@ -60,6 +65,7 @@ class ArduinoBridge:
                 status = [angles[i].split(':')[1] for i in range(len(angles))]
                 self.status.append(status)
             time.sleep(0.005)
+        print("[ArduinoBridge] Done status thread")
 
 def test_thread(bridge, thread_event):
     while not thread_event.is_set():

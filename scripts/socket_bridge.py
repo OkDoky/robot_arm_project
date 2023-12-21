@@ -10,7 +10,7 @@ class SocketClientHandler():
         self.port = PORT
         self.is_connected = False
 
-        self.current_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.current_client = None
         self.recv_queue = deque(maxlen=10)
         self.shutdown_event = Event()
         if AUTOSTART:
@@ -20,8 +20,13 @@ class SocketClientHandler():
     def request_connection(self):
         ## 소켓 서버에 연결 요청, 연결시까지 지속적으로 1초마다 연결시도를 하게되며, 
         ## 연결되면 recv thread를 열어 서버로부터 데이터를 받을 수 있도록 준비한다.
+        print("%s"%self.current_client)
+        if not self.current_client == None:
+            self.disconnection()
+        self.shutdown_event.clear()
         while not self.shutdown_event.is_set():
             try:
+                self.current_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 self.current_client.connect((self.host, self.port))
                 recv_thread = Thread(target=self._recv_thread)
                 recv_thread.daemon = True
@@ -39,6 +44,12 @@ class SocketClientHandler():
         self.is_connected = False
         print("[SocketClientHandler] successfully delete client instance")
 
+    def disconnection(self):
+        self.current_client.close()
+        self._request_shutdown_thread()
+        self.is_connected = False
+        self.current_client = None
+
     def _request_shutdown_thread(self):
         # thread event를 활성화하는 함수
         self.shutdown_event.set()
@@ -46,7 +57,7 @@ class SocketClientHandler():
     def send_msg(self, data):
         # 데이터 포멧 변경 및 전송
         data += "|"
-        # print("send : %s"%data)
+        print("send : %s"%data)
         self.current_client.send(data.encode('utf-8'))
 
     def get_msg(self):
@@ -59,22 +70,22 @@ class SocketClientHandler():
         return None
 
     def _recv_thread(self):
+        print("[SocketClientHandler] recv thread Start")
         while not self.shutdown_event.is_set():
             try:
                 packet = self.current_client.recv(1024).decode('utf-8')
+                success = False
+                temp = packet.find("|")
+                if temp != -1:
+                    # '|' 문자가 있으면 해당 위치까지 문자열을 추출
+                    print("recv data : %s"%packet[:temp])
+                    self.recv_queue.append(packet[:temp])
+                    success = True
             except socket.timeout:
                 continue
-            while True:
-                success = False
-                try:
-                    temp = packet.find("|")
-                    success = True
-                except Exception:
-                    pass
-                finally:
-                    if success:
-                        self.recv_queue.append(packet[:temp])
-                        print(packet[:temp])
+            except Exception:
+                pass
+        print("[SocketClientHandler] recv thread Done")
 
 
 if __name__ == "__main__":
